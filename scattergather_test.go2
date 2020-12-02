@@ -1,0 +1,26 @@
+package scattergather
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"testing"
+)
+
+func TestBasic(t *testing.T) {
+	sg := new(ScatterGather[int])
+	ctx := context.Background()
+	args := make([]int, cap(sg.resultChan)+10)
+	expected := make([]int, cap(args))
+	for i, _ := range args {
+        j := i // Capture loop variable
+		args[i] = i
+		expected[i] = i * i
+		sg.Run(func() (int, error) { return j*j, nil }, ctx)
+	}
+	result, _ := sg.Wait()
+	sort.Ints(result)
+    fmt.Println(args)
+    fmt.Println(expected)
+    fmt.Println(result)
+}
