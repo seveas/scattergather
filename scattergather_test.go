@@ -155,3 +155,15 @@ func semTester(ctx context.Context, args ...interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("Failed to aquire semaphore")
 	}
 }
+
+func TestCanceledContext(t *testing.T) {
+	sg := New(3)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := 0; i < 100; i++ {
+		sg.Run(func(ctx context.Context, args ...interface{}) (interface{}, error) { <-ctx.Done(); return args[0], nil }, ctx, 1)
+	}
+	results, err := sg.Wait()
+	assert.NotEqual(t, 100, len(results), "No results returned")
+	assert.Equal(t, "context canceled", err.(*ScatteredError).Errors[0].Error())
+}

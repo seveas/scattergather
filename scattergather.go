@@ -80,6 +80,7 @@ func (sg *ScatterGather) Run(callable ScatteredFunction, ctx context.Context, ar
 		defer sg.waitGroup.Done()
 		if err := sg.semaphore.Acquire(ctx, 1); err != nil {
 			sg.resultChan <-scatterResult{val: nil, err: err}
+			return
 		}
 		defer sg.semaphore.Release(1)
 		ret, err := callable(ctx, args...)
