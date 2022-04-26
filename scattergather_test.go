@@ -19,83 +19,49 @@ func TestScatteredError(t *testing.T) {
 }
 
 func TestBasic(t *testing.T) {
-	sg := New(0)
+	sg := new(ScatterGather[int])
 	ctx := context.Background()
 	args := make([]int, cap(sg.resultChan)+10)
 	expected := make([]int, cap(args))
-	for i, _ := range args {
+	for i := range args {
 		args[i] = i
 		expected[i] = i * i
-		sg.Run(square, ctx, i)
+		sg.Run(ctx, square(i))
 	}
-	untypedResult, err := sg.Wait()
+	result, err := sg.Wait()
 	assert.Nil(t, err, "No error is returned")
-	result:= make([]int, len(untypedResult))
-	for i, v := range(untypedResult) {
-		result[i] = v.(int)
-	}
 	sort.Ints(result)
 	assert.Equal(t, expected, result, "We correctly square an array of integers")
 }
 
 func TestWithErrors(t *testing.T) {
-	sg := New(0)
-	ctx := context.Background()
-	args := make([]int, cap(sg.resultChan)+10)
-	expected := make([]int, cap(args))
-	expecterr := &ScatteredError{}
-	for i, _ := range args {
-		args[i] = i
-		if i % 2 != 0 {
-			expected[i] = i * i
-		} else {
-			expecterr.AddError(&cantEven{})
-		}
-		sg.Run(squareOdds, ctx, i)
-	}
-	sort.Ints(expected)
-	untypedResult, err := sg.Wait()
-	assert.ErrorIs(t, err, expecterr, "A correct error is returned")
-	result:= make([]int, len(untypedResult))
-	for i, v := range(untypedResult) {
-		result[i] = v.(int)
-	}
-	sort.Ints(result)
-	assert.Equal(t, expected, result, "We correctly square an array of integers")
-}
-
-func TestWithErrorsAndPartialResults(t *testing.T) {
-	sg := New(0)
+	sg := New[int](0)
 	ctx := context.Background()
 	args := make([]int, cap(sg.resultChan)+10)
 	expected := make([]int, cap(args)/2)
 	expecterr := &ScatteredError{}
-	for i, _ := range args {
+	for i := range args {
 		args[i] = i
-		if i % 2 != 0 {
+		if i%2 != 0 {
 			expected[i/2] = i * i
 		} else {
 			expecterr.AddError(&cantEven{})
 		}
-		sg.Run(squareOddsOrNil, ctx, i)
+		sg.Run(ctx, squareOdds(i))
 	}
-	sort.Ints(expected)
-	untypedResult, err := sg.Wait()
+	result, err := sg.Wait()
 	assert.ErrorIs(t, err, expecterr, "A correct error is returned")
-	result:= make([]int, len(untypedResult))
-	for i, v := range(untypedResult) {
-		result[i] = v.(int)
-	}
+	sort.Ints(expected)
 	sort.Ints(result)
 	assert.Equal(t, expected, result, "We correctly square an array of integers")
 }
 
-func square(ctx context.Context, args ...interface{}) (interface{}, error) {
-	v := args[0].(int)
-	return v * v, nil
+func square(i int) func() (int, error) {
+	return func() (int, error) { return i * i, nil }
 }
 
-type cantEven struct {}
+type cantEven struct{}
+
 func (*cantEven) Error() string {
 	return "I can't even"
 }
@@ -104,66 +70,54 @@ func (*cantEven) Is(err error) bool {
 	return ok
 }
 
-func squareOdds(ctx context.Context, args ...interface{}) (interface{}, error) {
-	v := args[0].(int)
-	if v % 2 == 0 {
-		return 0, &cantEven{}
-	} else {
-		return v * v, nil
-	}
-}
-
-func squareOddsOrNil(ctx context.Context, args ...interface{}) (interface{}, error) {
-	v := args[0].(int)
-	if v % 2 == 0 {
-		return nil, &cantEven{}
-	} else {
-		return v * v, nil
+func squareOdds(i int) func() (int, error) {
+	return func() (int, error) {
+		if i%2 == 0 {
+			return 0, &cantEven{}
+		}
+		return i * i, nil
 	}
 }
 
 func TestWithSemaphore(t *testing.T) {
-	sg := New(1)
+	sg := New[int](1)
 	ctx := context.Background()
 	s := semaphore.NewWeighted(1)
 	attempts := 3
 	expected := make([]int, attempts)
-	for i, _ := range(expected) {
+	for i := range expected {
 		expected[i] = 1
-		sg.Run(semTester, ctx, s)
+		sg.Run(ctx, semTester(s))
 	}
-	untypedResult, err := sg.Wait()
+	result, err := sg.Wait()
 	assert.Nil(t, err)
-	result:= make([]int, len(untypedResult))
-	for i, v := range(untypedResult) {
-		result[i] = v.(int)
-	}
 	sort.Ints(result)
 	assert.Equal(t, expected, result, "No concurrent runs detected")
 }
 
-func semTester(ctx context.Context, args ...interface{}) (interface{}, error) {
-	s := args[0].(*semaphore.Weighted)
+func semTester(s *semaphore.Weighted) func() (int, error) {
+	return func() (int, error) {
 
-	if s.TryAcquire(1) {
-		// We grabbed the semaphore, sleep and return
-		defer s.Release(1)
-		time.Sleep(50*time.Millisecond)
-		return 1, nil
-	} else {
+		if s.TryAcquire(1) {
+			// We grabbed the semaphore, sleep and return
+			defer s.Release(1)
+			time.Sleep(50 * time.Millisecond)
+			return 1, nil
+		}
 		// we failed to grab the semaphore, so we're running in parallel with another one!
-		return nil, fmt.Errorf("Failed to aquire semaphore")
+		return 0, fmt.Errorf("Failed to aquire semaphore")
 	}
 }
 
 func TestCanceledContext(t *testing.T) {
-	sg := New(3)
+	sg := New[int](3)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	for i := 0; i < 100; i++ {
-		sg.Run(func(ctx context.Context, args ...interface{}) (interface{}, error) { <-ctx.Done(); return args[0], nil }, ctx, 1)
+	<-ctx.Done()
+	for i := 0; i < 1000; i++ {
+		sg.Run(ctx, square(i))
 	}
 	results, err := sg.Wait()
-	assert.NotEqual(t, 100, len(results), "No results returned")
+	assert.NotEqual(t, 1000, len(results), "No results returned")
 	assert.Equal(t, "context canceled", err.(*ScatteredError).Errors[0].Error())
 }
