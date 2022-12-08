@@ -11,14 +11,15 @@ import (
 )
 
 type ScatterGather[T any] struct {
-	waitGroup  *sync.WaitGroup
-	results    []T
-	errors     *ScatteredError
-	resultChan chan scatterResult[T]
-	doneChan   chan interface{}
-	initOnce   sync.Once
-	gatherOnce sync.Once
-	semaphore  *semaphore.Weighted
+	waitGroup      *sync.WaitGroup
+	results        []T
+	keepAllResults bool
+	errors         *ScatteredError
+	resultChan     chan scatterResult[T]
+	doneChan       chan interface{}
+	initOnce       sync.Once
+	gatherOnce     sync.Once
+	semaphore      *semaphore.Weighted
 }
 
 type scatterResult[T any] struct {
@@ -32,6 +33,10 @@ func New[T any](parallel int64) *ScatterGather[T] {
 	sg := &ScatterGather[T]{}
 	sg.init(parallel)
 	return sg
+}
+
+func (sg *ScatterGather[T]) KeepAllResults(keep bool) {
+	sg.keepAllResults = keep
 }
 
 func (sg *ScatterGather[T]) init(parallel int64) {
@@ -59,7 +64,8 @@ func (sg *ScatterGather[T]) gatherer() {
 	for res := range sg.resultChan {
 		if res.err != nil {
 			sg.errors.AddError(res.err)
-		} else {
+		}
+		if res.err == nil || sg.keepAllResults {
 			sg.results = append(sg.results, res.val)
 		}
 	}

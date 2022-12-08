@@ -56,6 +56,30 @@ func TestWithErrors(t *testing.T) {
 	assert.Equal(t, expected, result, "We correctly square an array of integers")
 }
 
+func TestKeepAllResults(t *testing.T) {
+	sg := New[int](0)
+	sg.KeepAllResults(true)
+	ctx := context.Background()
+	args := make([]int, cap(sg.resultChan)+10)
+	expected := make([]int, cap(args))
+	expecterr := &ScatteredError{}
+	for i := range args {
+		args[i] = i
+		if i%2 != 0 {
+			expected[i] = i * i
+		} else {
+			expected[i] = 0
+			expecterr.AddError(&cantEven{})
+		}
+		sg.Run(ctx, squareOdds(i))
+	}
+	result, err := sg.Wait()
+	assert.ErrorIs(t, err, expecterr, "A correct error is returned")
+	sort.Ints(expected)
+	sort.Ints(result)
+	assert.Equal(t, expected, result, "We correctly square an array of integers")
+}
+
 func square(i int) func() (int, error) {
 	return func() (int, error) { return i * i, nil }
 }
