@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"sync"
 
-	"golang.org/x/sync/semaphore"
+	"github.com/seveas/scattergather/x/sync/semaphore"
 )
 
 type ScatterGather[T any] struct {
@@ -33,6 +33,10 @@ func New[T any](parallel int64) *ScatterGather[T] {
 	sg := &ScatterGather[T]{}
 	sg.init(parallel)
 	return sg
+}
+
+func (sg *ScatterGather[T]) SetParallel(parallel int64) {
+	sg.semaphore.SetSize(parallel)
 }
 
 func (sg *ScatterGather[T]) KeepAllResults(keep bool) {

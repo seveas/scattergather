@@ -103,6 +103,13 @@ func squareOdds(i int) func() (int, error) {
 	}
 }
 
+func sleepTest(i int) func() (int, error) {
+	return func() (int, error) {
+		time.Sleep(time.Second / 2)
+		return i, nil
+	}
+}
+
 func TestWithSemaphore(t *testing.T) {
 	sg := New[int](1)
 	ctx := context.Background()
@@ -144,4 +151,21 @@ func TestCanceledContext(t *testing.T) {
 	results, err := sg.Wait()
 	assert.NotEqual(t, 1000, len(results), "No results returned")
 	assert.Equal(t, "context canceled", err.(*ScatteredError).Errors[0].Error())
+}
+
+func TestSetParallel(t *testing.T) {
+	start := time.Now()
+	sg := New[int](0)
+	sg.SetParallel(1)
+	ctx := context.Background()
+	for i := 0; i < 100; i++ {
+		sg.Run(ctx, sleepTest(i))
+	}
+	time.Sleep(600 * time.Millisecond)
+	sg.SetParallel(50)
+	results, err := sg.Wait()
+	end := time.Now()
+	assert.Nil(t, err)
+	assert.Equal(t, 100, len(results), "We have 100 results")
+	assert.Equal(t, end.Sub(start).Truncate(100*time.Millisecond), 1600*time.Millisecond, "We ran in 1.6 seconds")
 }
