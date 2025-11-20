@@ -32,6 +32,7 @@ type scatterResult[T any] struct {
 func New[T any](parallel int64) *ScatterGather[T] {
 	sg := &ScatterGather[T]{}
 	sg.init(parallel)
+	sg.gather()
 	return sg
 }
 
@@ -100,6 +101,8 @@ func (sg *ScatterGather[T]) Run(ctx context.Context, callable func() (T, error))
 // returned error is either `nil` to indicate no subtask returned an error or a
 // *ScatteredError containing all errors returned by subtasks.
 func (sg *ScatterGather[T]) Wait() ([]T, error) {
+	sg.init(0)
+	sg.gather()
 	sg.waitGroup.Wait()
 	close(sg.resultChan)
 	<-sg.doneChan

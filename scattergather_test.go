@@ -80,6 +80,13 @@ func TestKeepAllResults(t *testing.T) {
 	assert.Equal(t, expected, result, "We correctly square an array of integers")
 }
 
+func TestZeroTasks(t *testing.T) {
+	sg := New[int](0)
+	result, err := sg.Wait()
+	assert.Nil(t, err, "No error is returned")
+	assert.Equal(t, 0, len(result), "We have zero results")
+}
+
 func square(i int) func() (int, error) {
 	return func() (int, error) { return i * i, nil }
 }
